@@ -40,19 +40,20 @@ def main():
     alert_balance = float(get_env('ALERT_BALANCE', '10'))
     check_interval = int(get_env('CHECK_INTERVAL', '0'))  # GitHub Actions 使用单次模式
     
-    # 读取 SMTP 配置
-    smtp_server = get_env('SMTP_SERVER', required=True)
+    # Server酱配置（先读取，用于判断邮箱是否必需）
+    server_chan_enabled = parse_bool(get_env('SERVER_CHAN_ENABLED', 'false'))
+    
+    # 读取 SMTP 配置（如果启用了 Server酱，邮箱配置可选）
+    smtp_required = not server_chan_enabled  # 如果没启用 Server酱，邮箱必需
+    smtp_server = get_env('SMTP_SERVER', required=smtp_required)
     smtp_port = int(get_env('SMTP_PORT', '465'))
-    smtp_username = get_env('SMTP_USERNAME', required=True)
-    smtp_password = get_env('SMTP_PASSWORD', required=True)
+    smtp_username = get_env('SMTP_USERNAME', required=smtp_required)
+    smtp_password = get_env('SMTP_PASSWORD', required=smtp_required)
     smtp_security = get_env('SMTP_SECURITY', 'ssl')
     
     # 读取房间配置（支持多个房间）
     room_names = parse_list(get_env('ROOM_NAME', required=True))
-    email_recipients = parse_list(get_env('EMAIL_RECIPIENTS', required=True))
-    
-    # Server酱配置
-    server_chan_enabled = parse_bool(get_env('SERVER_CHAN_ENABLED', 'false'))
+    email_recipients = parse_list(get_env('EMAIL_RECIPIENTS', ''))
     server_chan_uid = get_env('SERVER_CHAN_UID', '')
     server_chan_sendkey = get_env('SERVER_CHAN_SENDKEY', '')
     
@@ -82,7 +83,7 @@ def main():
     for room_name in room_names:
         query = {
             "room_name": room_name,
-            "recipients": email_recipients,
+            "recipients": email_recipients if email_recipients else ["placeholder@example.com"],
             "server_chan": {
                 "enabled": server_chan_enabled,
                 "recipients": server_chan_recipients
@@ -97,10 +98,10 @@ def main():
         "check_interval": check_interval,
         "alert_balance": alert_balance,
         "smtp": {
-            "server": smtp_server,
+            "server": smtp_server if smtp_server else "smtp.placeholder.com",
             "port": smtp_port,
-            "username": smtp_username,
-            "password": smtp_password,
+            "username": smtp_username if smtp_username else "placeholder@example.com",
+            "password": smtp_password if smtp_password else "placeholder",
             "security": smtp_security
         },
         "queries": queries

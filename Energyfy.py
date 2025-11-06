@@ -119,18 +119,22 @@ def send_notifications(room_name, balance, alert_balance, room_config, notificat
             except Exception as e:
                 logger.exception(f"发送Server酱通知失败（用户 {recipient['uid']}）")
 
-    # 发送邮件通知
-    logger.debug("[send_notifications] 准备发送邮件 -> 收件人: %s", room_config['recipients'])
-    try:
-        notification.send_email(
-            recipients=room_config["recipients"],
-            subject=f"电费余额告警 - {room_name}",
-            text_content=text_content,
-            html_content=html_content
-        )
-        logger.info(f"已向房间 {room_name} 发送邮件通知")
-    except Exception as e:
-        logger.exception(f"发送邮件失败（房间 {room_name}）")
+    # 发送邮件通知（如果配置了有效的收件人）
+    recipients = room_config.get("recipients", [])
+    if recipients and recipients != ["placeholder@example.com"]:
+        logger.debug("[send_notifications] 准备发送邮件 -> 收件人: %s", recipients)
+        try:
+            notification.send_email(
+                recipients=recipients,
+                subject=f"电费余额告警 - {room_name}",
+                text_content=text_content,
+                html_content=html_content
+            )
+            logger.info(f"已向房间 {room_name} 发送邮件通知")
+        except Exception as e:
+            logger.exception(f"发送邮件失败（房间 {room_name}）")
+    else:
+        logger.debug("[send_notifications] 跳过邮件通知（未配置有效收件人）")
 
 
 def main(path=None):
