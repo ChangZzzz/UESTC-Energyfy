@@ -1,0 +1,210 @@
+name: Test Notification
+
+on:
+  # 只支持手动触发
+  workflow_dispatch:
+    inputs:
+      test_message:
+        description: '测试消息内容'
+        required: false
+        default: '这是一条测试推送消息'
+        type: string
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    steps:
+    - name: 📥 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 🐍 设置 Python 环境
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    - name: 📦 安装依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: 📱 测试 Server酱 推送
+      if: ${{ secrets.SERVER_CHAN_ENABLED == 'true' }}
+      env:
+        SERVER_CHAN_UID: ${{ secrets.SERVER_CHAN_UID }}
+        SERVER_CHAN_SENDKEY: ${{ secrets.SERVER_CHAN_SENDKEY }}
+        TEST_MESSAGE: ${{ github.event.inputs.test_message }}
+      run: |
+        python - <<EOF
+        import os
+        import requests
+        import json
+        
+        uid = os.environ.get('SERVER_CHAN_UID')
+        sendkey = os.environ.get('SERVER_CHAN_SENDKEY')
+        message = os.environ.get('TEST_MESSAGE', '这是一条测试推送消息')
+        
+        if not uid or not sendkey:
+            print("❌ 错误：未配置 Server酱 UID 或 SendKey")
+            exit(1)
+        
+        url = f"https://{uid}.push.ft07.com/send/{sendkey}.send"
+        
+        data = {
+            "title": "🧪 UESTC-Energyfy 推送测试",
+            "desp": f"""## 📱 测试消息
+        
+        {message}
+        
+        ---
+        
+        ✅ 如果你收到了这条消息，说明 Server酱 推送配置正确！
+        
+        📊 **测试信息**：
+        - 测试时间：{os.popen('date "+%Y-%m-%d %H:%M:%S"').read().strip()}
+        - 触发方式：手动触发
+        - Workflow：Test Notification
+        
+        💡 **下一步**：
+        - 当宿舍电费余额低于阈值时，你会自动收到类似的推送通知
+        - 可以在 GitHub Actions 中查看运行日志
+        """,
+            "short": "测试推送成功！如果你看到这条消息，说明配置正确 ✅"
+        }
+        
+        print(f"🚀 正在发送测试推送到 Server酱...")
+        print(f"   UID: {uid}")
+        print(f"   URL: {url}")
+        
+        try:
+            response = requests.post(url, json=data, timeout=10)
+            response.raise_for_status()
+            result = response.json()
+            
+            print(f"\n✅ 推送发送成功！")
+            print(f"   响应代码: {result.get('code')}")
+            print(f"   响应消息: {result.get('message')}")
+            print(f"\n📱 请检查你的手机 Server酱 APP，应该会收到测试消息！")
+            
+            if result.get('code') != 0:
+                print(f"\n⚠️  警告：推送可能失败")
+                print(f"   详细信息: {result}")
+                exit(1)
+                
+        except requests.exceptions.RequestException as e:
+            print(f"\n❌ 推送发送失败: {e}")
+            exit(1)
+        except Exception as e:
+            print(f"\n❌ 发生未知错误: {e}")
+            exit(1)
+        EOF
+    
+    - name: 📧 测试邮件通知（如果配置）
+      if: ${{ secrets.SMTP_USERNAME != '' }}
+      env:
+        SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+        SMTP_PORT: ${{ secrets.SMTP_PORT }}
+        SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+        SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+        SMTP_SECURITY: ${{ secrets.SMTP_SECURITY }}
+        EMAIL_RECIPIENTS: ${{ secrets.EMAIL_RECIPIENTS }}
+        TEST_MESSAGE: ${{ github.event.inputs.test_message }}
+      run: |
+        python - <<EOF
+        import os
+        import smtplib
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        from datetime import datetime
+        
+        smtp_server = os.environ.get('SMTP_SERVER')
+        smtp_port = int(os.environ.get('SMTP_PORT', '465'))
+        smtp_username = os.environ.get('SMTP_USERNAME')
+        smtp_password = os.environ.get('SMTP_PASSWORD')
+        smtp_security = os.environ.get('SMTP_SECURITY', 'ssl')
+        recipients = os.environ.get('EMAIL_RECIPIENTS', '').split(',')
+        message = os.environ.get('TEST_MESSAGE', '这是一条测试邮件')
+        
+        if not smtp_username or smtp_username == 'placeholder@example.com':
+            print("⏭️  跳过邮件测试（未配置有效的 SMTP）")
+            exit(0)
+        
+        print(f"📧 正在发送测试邮件...")
+        print(f"   SMTP服务器: {smtp_server}:{smtp_port}")
+        print(f"   发件人: {smtp_username}")
+        print(f"   收件人: {recipients}")
+        
+        # 创建邮件
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = '🧪 UESTC-Energyfy 邮件推送测试'
+        msg['From'] = smtp_username
+        msg['To'] = ', '.join(recipients)
+        
+        text_content = f"""
+        UESTC-Energyfy 邮件推送测试
+        
+        {message}
+        
+        如果你收到了这封邮件，说明邮件推送配置正确！
+        
+        测试时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+        触发方式: 手动触发
+        Workflow: Test Notification
+        """
+        
+        html_content = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; padding: 20px;">
+            <h2 style="color: #4CAF50;">🧪 UESTC-Energyfy 邮件推送测试</h2>
+            <p style="font-size: 16px;">{message}</p>
+            <hr style="border: 1px solid #ddd;">
+            <p style="color: #666;">
+                ✅ 如果你收到了这封邮件，说明邮件推送配置正确！<br><br>
+                <strong>测试信息：</strong><br>
+                • 测试时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}<br>
+                • 触发方式：手动触发<br>
+                • Workflow：Test Notification
+            </p>
+            <p style="color: #999; font-size: 12px;">
+                💡 当宿舍电费余额低于阈值时，你会自动收到类似的邮件通知。
+            </p>
+        </body>
+        </html>
+        """
+        
+        msg.attach(MIMEText(text_content, 'plain', 'utf-8'))
+        msg.attach(MIMEText(html_content, 'html', 'utf-8'))
+        
+        try:
+            # 连接SMTP服务器
+            if smtp_security == 'ssl':
+                server = smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=10)
+            else:
+                server = smtplib.SMTP(smtp_server, smtp_port, timeout=10)
+                if smtp_security == 'tls':
+                    server.starttls()
+            
+            # 登录并发送
+            server.login(smtp_username, smtp_password)
+            server.sendmail(smtp_username, recipients, msg.as_string())
+            server.quit()
+            
+            print(f"\n✅ 测试邮件发送成功！")
+            print(f"   请检查收件箱（可能在垃圾邮件中）")
+            
+        except Exception as e:
+            print(f"\n❌ 邮件发送失败: {e}")
+            exit(1)
+        EOF
+    
+    - name: ✅ 测试完成
+      run: |
+        echo "🎉 通知推送测试完成！"
+        echo ""
+        echo "📱 请检查："
+        echo "   - 手机 Server酱 APP 是否收到推送"
+        echo "   - 邮箱是否收到测试邮件（如果配置了邮件）"
+        echo ""
+        echo "💡 如果收到了消息，说明配置正确，可以正常使用了！"
